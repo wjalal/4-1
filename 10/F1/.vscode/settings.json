@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "cmath": "cpp",
+        "complex": "cpp",
+        "new": "cpp",
+        "random": "cpp",
+        "ostream": "cpp",
+        "ctime": "cpp"
+    }
+}

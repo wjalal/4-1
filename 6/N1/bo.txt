@@ -1,0 +1,65 @@
+Create a free student account. Either use the BUET Microsoft account (1905xxx@cse.buet.ac.bd) or use a normal Gmail account to register a new Microsoft account and then use 1905xxx@ugrad.cse.buet.ac.bd in the following link. Note you need to use the following link in both cases.
+
+Azure Free Student Account Link: https://azure.microsoft.com/en-us/pricing/offers/ms-azr-0170p/
+
+
+
+Follow this link to set the Environment in a Cloud:
+
+https://github.com/seed-labs/seed-labs/blob/master/manuals/cloud/seedvm-cloud.md
+
+Make sure to enable the automatic turn-off feature. It will save you dollars!
+
+
+Follow this link to setup the Environment in a local Virtual Machine:
+
+https://github.com/seed-labs/seed-labs/blob/master/manuals/vm/seedvm-manual.md
+
+
+
+To copy content from your local machine to your cloud vm, use the following command:
+
+scp -i <pravate_key_file.pem> <content_to_copy> username@public_ip:location
+
+For example:
+To copy a file:
+
+scp -i ./private_key.pem online.zip artushar@20.30.40.50:/home/artushar/Downloads
+
+To copy a folder:
+
+scp -r -i ./private_key.pem cse406 artushar@20.30.40.50:/home/artushar/Downloads
+
+
+
+Note: You cannot directly copy the contents to the seed user. So later you need to move the content from /home/artushar/Downloads to /home/seed/Downloads or wherever you want to.
+
+
+
+To connect cloud vm  using ssh:
+
+ssh -i <private_file.pem> username@public_ip
+
+
+
+To connect cloud VM using vnc client:
+
+
+At first, you need to move to the seed user. Then run the vnc server from the cloud VM. 
+
+sudo su seed
+
+vncserver -localhost no
+
+The first time, it will prompt you to set up a password. Later you need to use the password to connect from the vncclient.
+
+The first vncserver is set up at port 5901, and the second 5902,...
+
+So to connect the vm cloud from vncclient, you must give the accurate port number.
+Download the vnc viewer from here https://sourceforge.net/projects/tigervnc/files/stable/1.13.1/
+
+For example 20.30.40.50:5901 and provide the password
+
+
+
+If you face any issues, please comment here.  

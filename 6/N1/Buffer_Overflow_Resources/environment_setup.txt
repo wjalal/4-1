@@ -1,0 +1,32 @@
+Azure Free Student Account Link: https://azure.microsoft.com/en-us/pricing/offers/ms-azr-0170p/
+
+
+Follow this link to setup the Environment in a Cloud:
+https://github.com/seed-labs/seed-labs/blob/master/manuals/cloud/seedvm-cloud.md
+
+Follow this link to setup the Environment in a local Virtual Machine:
+https://github.com/seed-labs/seed-labs/blob/master/manuals/vm/seedvm-manual.md
+
+To copy content from your local machine to your cloud vm, use the following command:
+scp -i <identity_file_location> <content_to_copy> username@public_ip:location
+
+For example:
+scp -i ./public_key.pem online.zip artushar@20.30.40.50:/home/artushar/Downloads
+
+Note: You cannot directly copy the contents to the seed user. So later you need to move the content from /home/artushar/Downloads to /home/seed/Downloads or wherever you want to.
+
+
+To connect cloud vm  using ssh:
+ssh -i <identity_file_location> username@public_ip
+
+To connect cloud vm using vnc client:
+At first you need to move to the seed user. Then run the vncserver from the cloud vm. 
+sudo su seed
+vncserver -localhost no
+At the first time, it will prompt to set up a password. Later you need to use the password to connect from the vncclient.
+The first vncserver is set up at port 5901, and the second 5902, ....
+So to connect the vm cloud from vncclient, you must give the accurate port number.
+For example: 20.30.40.50:5901 and the provide the password
+
+
+

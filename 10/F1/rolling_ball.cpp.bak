@@ -1,0 +1,630 @@
+#include<bits/stdc++.h>
+#include<math.h>
+#include<random>
+#ifdef __linux__
+    #include<GL/glut.h>
+#elif WIN32
+    #include <windows.h>
+    #include <glut.h>
+#endif
+
+
+using namespace std;
+bool drawaxes = true, drawboard = true;
+
+class Point {
+    public:
+    double x, y, z;
+
+    Point (double x, double y, double z) {
+        this->x = x;
+        this->y = y;
+        this->z = z;
+    };
+};
+
+class Line {
+    public: 
+    Point *p1, *p2;
+
+    Line (Point* p1, Point* p2) {
+        this->p1 = p1;
+        this->p2 = p2;
+    };
+
+    Line (double x1, double y1, double z1, double x2, double y2, double z2) {
+        this->p1 = new Point (x1, y1, z1);
+        this->p2 = new Point (x2, y2, z2);
+    };
+};
+
+class Vec {
+    public:
+    double x, y, z, D, cosTx, cosTy, cosTz;
+
+    void updateCalc() {
+        D = sqrt (x*x + y*y + z*z);
+        // cout << D << endl;
+        cosTx = x/D, cosTy = y/D, cosTz = z/D;
+    };
+
+    Vec (double x, double y, double z) {
+        this->x = x, this->y = y, this->z = z;
+        updateCalc();
+    };
+
+    Vec (Point* P) {
+        this->x = P->x, this->y = P->y, this->z = P->z;
+        updateCalc();       
+    };
+    Vec (Line* L) {
+        this->x = L->p2->x - L->p1->x;
+        this->y = L->p2->y - L->p1->y;
+        this->z = L->p2->z - L->p1->z;
+        updateCalc();
+    };
+
+    Vec* cross (Vec* L) {
+        return new Vec (this->y * L->z - this->z * L->y,
+                        this->z * L->x - this->x * L->z,
+                        this->x * L->y - this->y * L->x);
+    };
+
+    void normalize() {
+        this->x /= D, this->y /= D; this->z /= D;
+        updateCalc();
+    };
+};
+
+void rotatePoint (Point* P, Vec* v, double A) {
+    Vec *u, *p;
+    p = new Vec (P);
+    u = v->cross(p);
+    P->x = cos(A)*p->x + sin(A)*u->x;
+    P->y = cos(A)*p->y + sin(A)*u->y;
+    P->z = cos(A)*p->z + sin(A)*u->z;
+    delete p;
+};
+
+class Sphere {
+    public:
+    int nSec, nStack;
+    Point ***upVerts, ***downVerts, **eqVerts, *nPole, *sPole;
+    double r;
+    Sphere (double r, int nSec, int nStack) {
+        cout << "hellosc1" << endl;
+        this->r = r, this->nSec = nSec, this->nStack = nStack;
+        nPole = new Point (0, 0, r);
+        sPole = new Point (0, 0, -r);
+        double dTheta = 2 * M_PI / nSec;
+        //start from pos x-axis CCW
+        eqVerts = new Point* [nSec];
+        upVerts = new Point** [nStack];
+        downVerts = new Point** [nStack];
+        for (int i=0; i<nSec; i++)
+            eqVerts[i] = new Point (r*cos(dTheta*i), r*sin(dTheta*i), 0);
+        for (int i=1; i<nStack; i++) {
+            upVerts[i] = new Point* [nSec];
+            downVerts[i] = new Point* [nSec];
+            double phi = M_PI/2 * i/nStack;
+            double R = r * cos(phi);
+            for (int j=0; j<nSec; j++) {
+                upVerts[i][j] = new Point (R*cos(dTheta*j), R*sin(dTheta*j), r*sin(phi));
+                downVerts[i][j] = new Point (R*cos(dTheta*j), R*sin(dTheta*j), -r*sin(phi));
+            };
+        };
+        cout << "hellosc2" << endl;
+    };
+
+    void rotate (Vec* v, double a) {
+        double A = a * M_PI/180.0;
+        rotatePoint (nPole, v, A), rotatePoint (sPole, v, A);
+        for (int i=0; i<nSec; i++) rotatePoint (eqVerts[i], v, A);
+        for (int k=1; k<nStack; k++) {
+            for (int i=0; i<nSec; i++) {
+                rotatePoint (upVerts[k][i], v, A);
+                rotatePoint (downVerts[k][i], v, A);
+            };
+        };
+    };
+};
+
+class Cylinder {
+    public:
+    int nSec;
+    Point **upVerts, **downVerts;
+    double r, h;
+    Cylinder (double r, double h, int nSec) {
+        this->r = r, this->h = h, this->nSec = nSec;
+        double dTheta = 2 * M_PI / nSec;
+        //start from pos x-axis CCW
+        downVerts = new Point* [nSec];
+        upVerts = new Point* [nSec];
+        for (int i=0; i<nSec; i++) {
+            downVerts[i] = new Point (r*cos(dTheta*i), r*sin(dTheta*i), 0);
+            upVerts[i] = new Point (r*cos(dTheta*i), r*sin(dTheta*i), h);
+        };
+    };
+};
+
+class Cone {
+    public:
+    int nSec;
+    Point **downVerts;
+    double r, h;
+    Cone (double r, double h, int nSec) {
+        this->r = r, this->h = h, this->nSec = nSec;
+        double dTheta = 2 * M_PI / nSec;
+        //start from pos x-axis CCW
+        downVerts = new Point* [nSec];
+        for (int i=0; i<nSec; i++) {
+            downVerts[i] = new Point (r*cos(dTheta*i), r*sin(dTheta*i), 0);
+        };
+    };
+};
+
+void drawSphere (Sphere* s) {
+    int nSec = s->nSec, nStack = s->nStack;
+    glBegin (GL_QUADS); {
+        for (int k=1; k < nStack-1; k++) {
+            for (int i=0; i < nSec; i++) {
+                if (i%2)  glColor4f (0.8, 0.0, 0.0, 0.2);
+                else glColor4f (1.0, 1.0, 0.0, 0.2);
+                glVertex3f (s->upVerts[k+1][i]->x, s->upVerts[k+1][i]->y, s->upVerts[k+1][i]->z);
+                glVertex3f (s->upVerts[k][i]->x, s->upVerts[k][i]->y, s->upVerts[k][i]->z);
+                if (i%2)  glColor4f (1.0, 0.0, 0.0, 0.2);
+                else glColor4f (0.8, 0.8, 0.0, 0.2);
+                glVertex3f (s->upVerts[k][(i+1)%nSec]->x, s->upVerts[k][(i+1)%nSec]->y, s->upVerts[k][(i+1)%nSec]->z);
+                glVertex3f (s->upVerts[k+1][(i+1)%nSec]->x, s->upVerts[k+1][(i+1)%nSec]->y, s->upVerts[k+1][(i+1)%nSec]->z);
+
+                if (i%2)  glColor4f (0.8, 0.0, 0.0, 0.2);
+                else glColor4f (1.0, 1.0, 0.0, 0.2);
+                glVertex3f (s->downVerts[k+1][i]->x, s->downVerts[k+1][i]->y, s->downVerts[k+1][i]->z);
+                glVertex3f (s->downVerts[k][i]->x, s->downVerts[k][i]->y, s->downVerts[k][i]->z);
+                if (i%2)  glColor4f (1.0, 0.0, 0.0, 0.2);
+                else glColor4f (0.8, 0.8, 0.0, 0.2);
+                glVertex3f (s->downVerts[k][(i+1)%nSec]->x, s->downVerts[k][(i+1)%nSec]->y, s->downVerts[k][(i+1)%nSec]->z);
+                glVertex3f (s->downVerts[k+1][(i+1)%nSec]->x, s->downVerts[k+1][(i+1)%nSec]->y, s->downVerts[k+1][(i+1)%nSec]->z);
+            };
+        };
+        for (int i=0; i < nSec; i++) {
+            if (i%2)  glColor4f (0.8, 0.0, 0.0, 0.2);
+            else glColor4f (1.0, 1.0, 0.0, 0.2);
+            glVertex3f (s->upVerts[1][i]->x, s->upVerts[1][i]->y, s->upVerts[1][i]->z);
+            glVertex3f (s->eqVerts[i]->x, s->eqVerts[i]->y, s->eqVerts[i]->z);
+            if (i%2)  glColor4f (1.0, 0.0, 0.0, 0.2);
+            else glColor4f (0.8, 0.8, 0.0, 0.2);
+            glVertex3f (s->eqVerts[(i+1)%nSec]->x, s->eqVerts[(i+1)%nSec]->y, s->eqVerts[(i+1)%nSec]->z);
+            glVertex3f (s->upVerts[1][(i+1)%nSec]->x, s->upVerts[1][(i+1)%nSec]->y, s->upVerts[1][(i+1)%nSec]->z);
+
+            if (i%2)  glColor4f (0.8, 0.0, 0.0, 0.2);
+            else glColor4f (1.0, 1.0, 0.0, 0.2);
+            glVertex3f (s->downVerts[1][i]->x, s->downVerts[1][i]->y, s->downVerts[1][i]->z);
+            glVertex3f (s->eqVerts[i]->x, s->eqVerts[i]->y, s->eqVerts[i]->z);
+            if (i%2)  glColor4f (1.0, 0.0, 0.0, 0.2);
+            else glColor4f (0.8, 0.8, 0.0, 0.2);
+            glVertex3f (s->eqVerts[(i+1)%nSec]->x, s->eqVerts[(i+1)%nSec]->y, s->eqVerts[(i+1)%nSec]->z);
+            glVertex3f (s->downVerts[1][(i+1)%nSec]->x, s->downVerts[1][(i+1)%nSec]->y, s->downVerts[1][(i+1)%nSec]->z);
+        };
+
+    } glEnd();
+    glBegin (GL_TRIANGLES); {
+        for (int i=0; i < nSec; i++) {
+            if (i%2)  glColor4f (0.8, 0.0, 0.0, 0.2);
+            else glColor4f (1.0, 1.0, 0.0, 0.2);
+            glVertex3f (s->nPole->x, s->nPole->y, s->nPole->z);
+            glVertex3f (s->upVerts[nStack-1][i]->x, s->upVerts[nStack-1][i]->y, s->upVerts[nStack-1][i]->z);
+            if (i%2)  glColor4f (1.0, 0.0, 0.0, 0.2);
+            else glColor4f (0.8, 0.8, 0.0, 0.2);
+            glVertex3f (s->upVerts[nStack-1][(i+1)%nSec]->x, s->upVerts[nStack-1][(i+1)%nSec]->y, s->upVerts[nStack-1][(i+1)%nSec]->z);
+
+            if (i%2)  glColor4f (0.8, 0.0, 0.0, 0.2);
+            else glColor4f (1.0, 1.0, 0.0, 0.2);
+            glVertex3f (s->sPole->x, s->sPole->y, s->sPole->z);
+            glVertex3f (s->downVerts[nStack-1][i]->x, s->downVerts[nStack-1][i]->y, s->downVerts[nStack-1][i]->z);
+            if (i%2)  glColor4f (1.0, 0.0, 0.0, 0.2);
+            else glColor4f (0.8, 0.8, 0.0, 0.2);
+            glVertex3f (s->downVerts[nStack-1][(i+1)%nSec]->x, s->downVerts[nStack-1][(i+1)%nSec]->y, s->downVerts[nStack-1][(i+1)%nSec]->z);
+        };
+    } glEnd();
+};
+
+void drawCylinder (Cylinder* s) {
+    int nSec = s->nSec;
+    glBegin (GL_QUADS); {
+        for (int i=0; i < nSec; i++) {
+            glColor4f (0.2, 0.2, 1.0, 0.2);
+            glVertex3f (s->upVerts[i]->x, s->upVerts[i]->y, s->upVerts[i]->z);
+            glVertex3f (s->upVerts[(i+1)%nSec]->x, s->upVerts[(i+1)%nSec]->y, s->upVerts[(i+1)%nSec]->z);
+            glColor4f (0.5, 0.5, 1.0, 0.2);
+            glVertex3f (s->downVerts[(i+1)%nSec]->x, s->downVerts[(i+1)%nSec]->y, s->downVerts[(i+1)%nSec]->z);
+            glVertex3f (s->downVerts[i]->x, s->downVerts[i]->y, s->downVerts[i]->z);
+        };
+    } glEnd();
+};
+
+void drawCone (Cone* s) {
+    int nSec = s->nSec;
+    glBegin (GL_TRIANGLES); {
+        for (int i=0; i < nSec; i++) {
+            glColor4f (0.2, 0.2, 1.0, 0.2);
+            glVertex3f (0.0, 0.0, s->h);
+            glColor4f (0.5, 0.5, 1.0, 0.2);
+            glVertex3f (s->downVerts[(i+1)%nSec]->x, s->downVerts[(i+1)%nSec]->y, s->downVerts[(i+1)%nSec]->z);
+            glVertex3f (s->downVerts[i]->x, s->downVerts[i]->y, s->downVerts[i]->z);
+            glVertex3f (s->downVerts[(i+1)%nSec]->x, s->downVerts[(i+1)%nSec]->y, s->downVerts[(i+1)%nSec]->z);
+            glVertex3f (s->downVerts[i]->x, s->downVerts[i]->y, s->downVerts[i]->z);
+            glVertex3f (0.0, 0.0, 0.0);
+        };
+    } glEnd();
+};
+
+Line lookAt (100, 100, 140, 0, 0, 0);
+Vec *upVec, *lookAtVec, *rightVec;
+Sphere ball (25.0, 20, 10);
+Cylinder ballDirAx (1.5, 50.0, 8);
+Cone ballDirHd (3.0, 5.0, 8);
+
+double ballCtrlAngle = 0, ballPosX = 0, ballPosY = 0, ballRotAngle = 0;
+
+void initCamVecs() {
+    lookAtVec = new Vec(&lookAt);
+    cout << lookAtVec->x << ", " << lookAtVec->y << ", " << lookAtVec->z << endl;
+    double fZ = sqrt ((lookAtVec->D)*(lookAtVec->D) - (lookAtVec->z)*(lookAtVec->z));
+    // cout << upVecZ << ", " << fZ/lookAtVec->D << endl;
+    double upVecZ = fZ/lookAtVec->D;
+    double uZc = sqrt (1 - upVecZ*upVecZ); 
+    double upVecX = (lookAtVec->z > 0 ? -1:+1) * lookAtVec->x/fZ *  uZc;
+    double upVecY = (lookAtVec->z > 0 ? -1:+1) * lookAtVec->y/fZ *  uZc;
+    upVec = new Vec (upVecX, upVecY, upVecZ);
+    cout << upVec->x << ", " << upVec->y << ", " << upVec->z << endl;
+    rightVec = lookAtVec->cross(upVec);
+    rightVec->normalize();
+    cout << rightVec->x << ", " << rightVec->y << ", " << rightVec->z << endl;
+}
+
+void init(){
+    printf("Do your initialization here\n");
+    drawaxes = 1;
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Set background color to black and opaque
+    glClearDepth(1.0f);
+    glEnable(GL_DEPTH_TEST);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+
+    gluPerspective(80, 1, 1, 5000.0);
+    initCamVecs();
+}
+
+void drawAxes() {
+	if (drawaxes) {
+		glColor3f(1.0, 1.0, 0.0);
+		glBegin(GL_LINES); {
+			glVertex3f( 100,0,0);
+			glVertex3f(-100,0,0);
+
+			glVertex3f(0,-100,0);
+			glVertex3f(0, 100,0);
+
+			glVertex3f(0,0, 100);
+			glVertex3f(0,0,-100);
+		} glEnd();
+	}
+}
+
+void drawBoard() {
+    if (drawboard) {
+        glBegin(GL_QUADS); {
+            for (int i = -4000; i<+4000; i+=50) {
+                for (int j = -4000; j<+4000; j+=50) {
+                    if ((i+j)%100) glColor3f(0.8, 0.8, 0.8);
+                    else glColor3f(0.2, 0.2, 0.2);
+                    glVertex3f(i, j, 0);
+                    glVertex3f(i+50, j, 0);
+                    glVertex3f(i+50, j+50, 0);
+                    if ((i+j)%100) glColor3f(1, 1, 1);
+                    else glColor3f(0, 0, 0);
+                    glVertex3f(i, j+50, 0);
+                };
+            };
+        } glEnd();
+    };
+};
+
+void zoomCamera (double d) {
+    lookAt.p1->x += (d * lookAtVec->cosTx), lookAt.p1->y += (d * lookAtVec->cosTy), lookAt.p1->z += (d * lookAtVec->cosTz);
+    lookAt.p2->x += (d * lookAtVec->cosTx), lookAt.p2->y += (d * lookAtVec->cosTy), lookAt.p2->z += (d * lookAtVec->cosTz);
+    delete lookAtVec;
+    lookAtVec = new Vec(&lookAt);
+    // cout << lookAt.p1->x << ", " << lookAt.p1->y << ", " << lookAt.p1->z << endl;
+    glutSwapBuffers(); 
+}
+
+void trnsltVertical (double d) {
+    lookAt.p1->x += (d * upVec->x), lookAt.p1->y += (d * upVec->y), lookAt.p1->z += (d * upVec->z);
+    lookAt.p2->x += (d * upVec->x), lookAt.p2->y += (d * upVec->y), lookAt.p2->z += (d * upVec->z);
+    delete lookAtVec;
+    lookAtVec = new Vec(&lookAt);
+}
+
+void trnsltHorizontal (double d) {
+    lookAt.p1->x += (d * rightVec->x), lookAt.p1->y += (d * rightVec->y), lookAt.p1->z += (d * rightVec->z);
+    lookAt.p2->x += (d * rightVec->x), lookAt.p2->y += (d * rightVec->y), lookAt.p2->z += (d * rightVec->z);
+    delete lookAtVec;
+    lookAtVec = new Vec(&lookAt);
+}
+
+void rotateHorizontal (double a) {      // rotate lookVec by angle a about upVec from eye
+    double A = a * M_PI / 180.0;
+    Vec* u = upVec->cross(lookAtVec);
+    Vec* Rot = new Vec (cos(A)*lookAtVec->x + sin(A)*u->x, 
+                        cos(A)*lookAtVec->y + sin(A)*u->y, 
+                        cos(A)*lookAtVec->z + sin(A)*u->z);
+    lookAt.p2->x = lookAt.p1->x + Rot->x;
+    lookAt.p2->y = lookAt.p1->y + Rot->y;
+    lookAt.p2->z = lookAt.p1->z + Rot->z;
+    delete lookAtVec;
+    lookAtVec = new Vec(&lookAt);
+    delete rightVec;
+    rightVec = lookAtVec->cross(upVec);
+    rightVec->normalize();
+} 
+
+void rotateVertical (double a) {      // rotate lookVec by angle a about rightVec from eye
+    double A = a * M_PI / 180.0;
+    Vec* u = rightVec->cross(lookAtVec);
+    Vec* Rot = new Vec (cos(A)*lookAtVec->x + sin(A)*u->x, 
+                        cos(A)*lookAtVec->y + sin(A)*u->y, 
+                        cos(A)*lookAtVec->z + sin(A)*u->z);
+    lookAt.p2->x = lookAt.p1->x + Rot->x;
+    lookAt.p2->y = lookAt.p1->y + Rot->y;
+    lookAt.p2->z = lookAt.p1->z + Rot->z;
+    delete lookAtVec;
+    lookAtVec = new Vec(&lookAt);
+    delete upVec;
+    upVec = rightVec->cross(lookAtVec);
+    upVec->normalize();
+} 
+
+void revolveVertical (double a) {      // rotate lookVec by angle a about rightVec from target
+    double A = a * M_PI / 180.0;
+    Vec* u = rightVec->cross(lookAtVec);
+    Vec* Rot = new Vec (cos(A)*lookAtVec->x + sin(A)*u->x, 
+                        cos(A)*lookAtVec->y + sin(A)*u->y, 
+                        cos(A)*lookAtVec->z + sin(A)*u->z);
+    lookAt.p1->x = lookAt.p2->x - Rot->x;
+    lookAt.p1->y = lookAt.p2->y - Rot->y;
+    lookAt.p1->z = lookAt.p2->z - Rot->z;
+    delete lookAtVec;
+    lookAtVec = new Vec(&lookAt);
+    delete upVec;
+    upVec = rightVec->cross(lookAtVec);
+    upVec->normalize();
+} 
+
+void revolveHorizontal (double a) {      // rotate lookVec by angle a about upVec from target
+    double A = a * M_PI / 180.0;
+    Vec* u = upVec->cross(lookAtVec);
+    Vec* Rot = new Vec (cos(A)*lookAtVec->x + sin(A)*u->x, 
+                        cos(A)*lookAtVec->y + sin(A)*u->y, 
+                        cos(A)*lookAtVec->z + sin(A)*u->z);
+    lookAt.p1->x = lookAt.p2->x - Rot->x;
+    lookAt.p1->y = lookAt.p2->y - Rot->y;
+    lookAt.p1->z = lookAt.p2->z - Rot->z;
+    delete lookAtVec;
+    lookAtVec = new Vec(&lookAt);
+    delete rightVec;
+    rightVec = lookAtVec->cross(upVec);
+    rightVec->normalize();
+} 
+
+
+void tilt (double a) {      // rotate upVec by angle a about lookVec
+    double A = a * M_PI / 180.0;
+    Vec* r = new Vec (lookAtVec->x, lookAtVec->y, lookAtVec->z);
+    r->normalize();
+    Vec* u = r->cross(upVec);
+    Vec* Rot = new Vec (cos(A)*upVec->x + sin(A)*u->x, 
+                        cos(A)*upVec->y + sin(A)*u->y, 
+                        cos(A)*upVec->z + sin(A)*u->z);
+    delete upVec;
+    upVec = Rot;
+    delete rightVec;
+    rightVec = lookAtVec->cross(upVec);
+    rightVec->normalize();
+} 
+
+// a openGL integer
+GLint counter = 0;
+
+void keyboardListener(unsigned char key,int x, int y){
+    switch (key)
+    {
+    case '1':
+        rotateHorizontal(5.0);
+        break;
+    case '2':
+        rotateHorizontal(-5.0);
+        break;
+    case '3':
+        rotateVertical(5.0);
+        break;
+    case '4':
+        rotateVertical(-5.0);
+        break;
+    case '5':
+        tilt(5.0);
+        break;
+    case '6':
+        tilt(-5.0);
+        break;
+    case 'w':
+        revolveVertical(-5.0);
+        break;
+    case 's':
+        revolveVertical(+5.0);
+        break;
+    case 'a':
+        revolveHorizontal(-5.0);
+        break;
+    case 'd':
+        revolveHorizontal(+5.0);
+        break;
+    default:
+        // printf("We don't know what you pressed\n");
+        break;
+    }
+
+
+    if (key == 'j') {
+        ballCtrlAngle = fmod (ballCtrlAngle + 5, 360);
+    } else if (key == 'l') {
+        ballCtrlAngle = fmod (ballCtrlAngle - 5, 360);
+    } else if (key == 'i') {
+        ballPosX += 5.0/360 * 2 * M_PI * ball.r * cos (ballCtrlAngle * M_PI/180);
+        ballPosY += 5.0/360 * 2 * M_PI * ball.r * sin (ballCtrlAngle * M_PI/180);
+        // ballRotAngle = fmod (ballRotAngle + 5, 360);
+        Vec* v = new Vec (-sin(ballCtrlAngle*M_PI/180), cos(ballCtrlAngle*M_PI/180), 0);
+                cout << v->x << ", " << v->y << ", " << v->z << endl;
+
+        ball.rotate (v, 5.0);     
+    } else if (key == 'k') {
+        ballPosX -= 5.0/360 * 2 * M_PI * ball.r * cos (ballCtrlAngle * M_PI/180);
+        ballPosY -= 5.0/360 * 2 * M_PI * ball.r * sin (ballCtrlAngle * M_PI/180);
+        // ballRotAngle = fmod (ballRotAngle - 5, 360);
+        Vec* v = new Vec (-sin(ballCtrlAngle*M_PI/180), cos(ballCtrlAngle*M_PI/180), 0);
+        cout << v->x << ", " << v->y << ", " << v->z << endl;
+        ball.rotate (v, -5.0);  
+    };
+}
+
+
+void specialKeyboardListener(int key,int x, int y){
+    switch (key)
+    {
+    case GLUT_KEY_UP:
+        zoomCamera(+5);
+        break;
+    case GLUT_KEY_DOWN:
+        zoomCamera(-5);
+        break;
+    case GLUT_KEY_LEFT:
+        trnsltHorizontal(-5);
+        break;
+    case GLUT_KEY_RIGHT:
+        trnsltHorizontal(+5);
+        break;
+    case GLUT_KEY_PAGE_UP:
+        trnsltVertical(+5);
+        break;
+    case GLUT_KEY_PAGE_DOWN:
+        trnsltVertical(-5);
+        break;
+    default:
+        // printf("We don't know what you pressed\n");
+        break;
+    };
+}
+
+
+double _rand(){
+    return (double)rand() / RAND_MAX;
+}
+
+void display() {
+    // printf("Display function called for %d times\n", counter);
+    
+    // glClearColor(0.5f, 0.5f, 0.5f, 1.0f); // Set background color to black and opaque
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+   
+    gluLookAt  (lookAt.p1->x, lookAt.p1->y, lookAt.p1->z, 
+                lookAt.p2->x, lookAt.p2->y, lookAt.p2->z,  
+                upVec->x, upVec->y, upVec->z);
+    // drawAxes();
+    drawBoard();
+
+    glPushMatrix();       
+        glTranslatef(ballPosX,ballPosY,ball.r);
+        glPushMatrix();
+            // glRotatef(ballRotAngle, -sin(ballCtrlAngle*M_PI/180), cos(ballCtrlAngle*M_PI/180), 0);
+            drawSphere(&ball);
+        glPopMatrix();
+
+        glPushMatrix();
+            glRotatef(ballCtrlAngle, 0, 0 ,1);
+            glPushMatrix();
+                glRotatef(90, 0, 1, 0);
+                drawCylinder(&ballDirAx);
+                glPushMatrix();
+                    glTranslatef(0,0,ballDirAx.h);
+                    drawCone(&ballDirHd);
+                glPopMatrix();
+            glPopMatrix();
+        glPopMatrix();
+    glPopMatrix();
+
+    // glBegin(GL_QUADS); {
+    //     glColor3f(1.0, 0.0, 0.0);
+    //     glVertex3f(20,20,20);
+    //     glVertex3f(20,-20,20);
+    //     glVertex3f(-20,-20,20);
+    //     glVertex3f(-20,20,20);
+    //     glColor3f(0.0, 1.0, 0.0);
+    //     glVertex3f(20,20,20);
+    //     glVertex3f(20,20,-20);
+    //     glVertex3f(20,-20,-20);
+    //     glVertex3f(20,-20,20);
+    //     glColor3f(0.0, 0.0, 1.0);
+    //     glVertex3f(20,-20,20);
+    //     glVertex3f(-20,-20,20);
+    //     glVertex3f(-20,-20,-20);
+    //     glVertex3f(20,-20,-20);
+    //     glColor3f(1.0, 0.0, 0.0);
+    //     glVertex3f(-20,-20,-20);
+    //     glVertex3f(-20,20,-20);
+    //     glVertex3f(20,20,-20);
+    //     glVertex3f(20,-20,-20);
+    //     glColor3f(0.0, 1.0, 0.0);
+    //     glVertex3f(-20,-20,-20);
+    //     glVertex3f(-20,-20,20);
+    //     glVertex3f(-20,20,20);
+    //     glVertex3f(-20,20,-20);
+    //     glColor3f(0.0, 0.0, 1.0);
+    //     glVertex3f(-20,20,-20);
+    //     glVertex3f(20,20,-20);
+    //     glVertex3f(20,20,20);
+    //     glVertex3f(-20,20,20);
+    // } glEnd();
+
+    // glFlush();
+    glutSwapBuffers();
+
+}
+
+void idle(){
+
+    counter++;
+    glutPostRedisplay();
+}
+
+int main(int argc,char** argv){
+    glutInit(&argc,argv);
+    glutInitWindowSize(800, 800);   // Set the window's initial width & height
+    glutInitWindowPosition(1920+350, 125); // Position the window's initial top-left corner
+    glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
+    glutCreateWindow("Test");
+    glutDisplayFunc(display);
+    glutKeyboardFunc(keyboardListener);
+    glutSpecialFunc(specialKeyboardListener);
+    glutIdleFunc(idle);
+    init();
+
+
+    glutMainLoop();
+    return 0;
+
+}

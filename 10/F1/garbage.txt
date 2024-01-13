@@ -1,0 +1,12 @@
+    // if (fabs(fabs(ballPosY)-boundary+ball.r) <= 1) {
+    //     // double bX = cos(A), bY = -sin(A);
+    //     A = fmod (atan2(-sin(A),+cos(A)) + 2*M_PI, 2*M_PI);
+    // } else if (fabs(fabs(ballPosX)-boundary+ball.r) <= 1) {
+    //     A = fmod (atan2(+sin(A),-cos(A)) + 2*M_PI, 2*M_PI);
+    // }
+    // ballCtrlAngle = 180.0/M_PI * A;
+
+
+
+
+    
