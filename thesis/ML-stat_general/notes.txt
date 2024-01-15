@@ -1,0 +1,13 @@
+Bootstrapped Aggregation / Bagging
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Sampling with replacement: randomly selecting rows of data from a dataset and allowing for duplicate selections
+Bootstrapped dataset/sample: output of sampling w replacement; hasd same no. of data as original dataset
+Bootstrapping: Creating unique Bootstrapped datasets, calculating a certain property(statistic) of each, and logging that property (eg. mean).
+Can use the Bootstrapped statistic histogram to estimate standard errors and confidence intervals.
+
+
+LOWESS (/LOESS) Regression
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+LOESS and LOWESS (locally weighted scatterplot smoothing) are two strongly related non-parametric regression methods that combine multiple regression models in a k-nearest-neighbor-based meta-model.
+
+
