@@ -1,5 +1,0 @@
-Lasso Regression is good for: 
--- avoiding overfitting, unlike linear or logistic regression. the problem with those general linear models is quite prominent when the model is used the same population it was trained with, because the errors get "over-minimised"
--- select most important predictor variables, when there are a large no. of vars, the rest are "culled"
-
-Lasso is a regularisation method.
