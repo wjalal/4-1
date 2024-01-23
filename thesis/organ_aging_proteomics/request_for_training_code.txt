@@ -1,0 +1,10 @@
+ 
+Dear sir,
+
+Thank you very much for your work on organ aging and congratulations on you publication on Nature. I am part of a research team from the Department of Computer Science and Engineering at Bangladesh University of Engineering and Technology, supervised by Dr. M. Sohel Rahman. We found your article very interesting and would like to explore further on alternative methods to train on the dataset. We want to reproduce your outputs, and apply alternative regressions, or explore the possibility of using neural networks here. 
+
+We have gone through your GitHub repository, and can see that you have included the trained models, and included the training weights in the supplements of your publication on Nature. We understand that the training data is not included due to privacy concerns. We would be very grateful if you could make the code for training the models available to us.
+
+Sincerely, 
+Wasif Jalal
+

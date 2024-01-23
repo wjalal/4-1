@@ -17,7 +17,7 @@ double fovY, aR, near, far, dx, dy, topY, leftX;
 H3dMat *M = new H3dMat(), *V = new H3dMat(), *P = new H3dMat();
 stack<H3dMat*> S; 
 vector<vector<Point*>> triangles;
-double **zBuffer, **imageBuffer;
+double **zBuffer;
 
 void readScene (ifstream& scene) {
     scene >> eye.x >> eye.y >> eye.z;
@@ -122,17 +122,17 @@ void zBufferScan() {
     image.set_all_channels (0, 0, 0);
 
     for (int t=0; t<triangles.size(); t++) {
-        int colR = random(), colG = random(), colB = random();
-        int topLine , bottomLine;
-        double epsilon = 1.0/screenHeight*2.0;
+        int colR = randomCol()%256, colG = randomCol()%256, colB = randomCol()%256;
+        int topLine, bottomLine;
+        double epsilon = 1.0/screenHeight;
 
         double maxY = max(triangles[t][0]->y, max(triangles[t][1]->y, triangles[t][2]->y));
         if (maxY > topY) topLine = 0;
-        else topLine = (topY-maxY)/2.0 * screenHeight;
+        else topLine = round((topY-maxY)/2.0 * screenHeight);
 
         double minY = min(triangles[t][0]->y, min(triangles[t][1]->y, triangles[t][2]->y));
         if (minY < -topY) bottomLine = screenHeight-1;
-        else bottomLine = (topY-minY)/2.0 * screenHeight;
+        else bottomLine = round((topY-minY)/2.0 * screenHeight);
         // cout << topLine << " " << bottomLine << endl;
 
         int k; Point p[3];
@@ -163,12 +163,12 @@ void zBufferScan() {
 
             int leftPoint, rightPoint;
             if (xa < leftX) leftPoint = 0;
-            else leftPoint = (xa-leftX)/2.0 * screenWidth;
+            else leftPoint = round((xa-leftX)/2.0 * screenWidth);
             if (xb > -leftX) rightPoint = screenWidth-1;
-            else rightPoint = (xb-leftX)/2.0 * screenWidth;
+            else rightPoint = round((xb-leftX)/2.0 * screenWidth);
             // cout << leftPoint << " " << rightPoint << endl;
 
-            for (int c = leftPoint; c < rightPoint; c++) {
+            for (int c = leftPoint; c <= rightPoint; c++) {
                 double xp = leftX + dx*c;
                 double zp = za + (xp-xa)/(xa-xb)*(za-zb);
                 if (zp < zBuffer[r][c] && fabs(zp) < zMax) {
@@ -190,7 +190,11 @@ void zBufferScan() {
         zBufferFile << endl;
     };
 
+    for (int i=0; i<screenHeight; i++) delete [] zBuffer[i];
+    delete [] zBuffer;
+
     image.save_image ("out.bmp");
+
 };
 
 int main() {
