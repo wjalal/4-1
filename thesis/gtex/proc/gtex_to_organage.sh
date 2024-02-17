@@ -12,13 +12,30 @@ for file in ../data/gene_tpm_2017-06-05_v8_*.gct.gz; do
     read -r n_gene n_sample nvm1 nvm2 <<< "$(head -n 1 ./proc_data/$organ.tsv)"
     echo "$organ: $n_sample"
     sed -i '1d' ./proc_data/$organ.tsv
+    n_gene=$(( $n_gene + 1 ))
+    n_sample=$(( $n_sample + 1 ))
     ../transpose -i "$n_gene"x"$n_sample"  -t ./proc_data/$organ.tsv > ./proc_data/$organ.t.tsv
     sed -i '1d' ./proc_data/$organ.t.tsv
     sed -i '2d' ./proc_data/$organ.t.tsv
     sed -i 's/\([[:alnum:]]\+-[[:alnum:]]\+\)\(-[[:alnum:]]\+\)\+\(.*\)/\1\3/' ./proc_data/$organ.t.tsv
     rm ./proc_data/$organ.tsv
     mv ./proc_data/$organ.t.tsv ./proc_data/$organ.tsv
+    head -n 1 ./proc_data/$organ.tsv > ./proc_data/$organ.head.txt
+    cp ./proc_data/$organ.tsv ./proc_data/$organ.HL.tsv
+    sed -i '1d' ./proc_data/$organ.HL.tsv
+    wc -l ./proc_data/$organ.HL.tsv
+    gawk 'BEGIN {srand()} {f = FILENAME (rand() <= 0.82 ? ".80" : ".20"); print > f}' ./proc_data/$organ.HL.tsv
+    cat ./proc_data/$organ.head.txt ./proc_data/$organ.HL.tsv.20 > ./proc_data/$organ.TEST.tsv
+    cat ./proc_data/$organ.head.txt ./proc_data/$organ.HL.tsv.80 > ./proc_data/$organ.TRAIN.tsv
+    rm ./proc_data/$organ.HL.tsv
+    rm ./proc_data/$organ.head.txt
+    rm ./proc_data/$organ.HL.tsv.20
+    rm ./proc_data/$organ.HL.tsv.80
+    wc -l ./proc_data/$organ.TEST.tsv
+    wc -l ./proc_data/$organ.TRAIN.tsv
 done
+
+
 # gzip -d gene_tpm_2017-06-05_v8_artery_coronary.gct.gz 
 # mv gene_tpm_2017-06-05_v8_artery_coronary.gct gene_tpm_2017-06-05_v8_artery_coronary.tsv
 
