@@ -9,7 +9,6 @@
 
 
 using namespace std;
-bool drawaxes = true, drawUpArrow = true, drawboard = true;
 
 class Point {
     public:
@@ -72,12 +71,14 @@ class Vec {
     Vec operator + (const Vec& b) {
         Vec sum(this->x, this->y, this->z);
         sum.x += b.x, sum.y += b.y, sum.z += b.z;
+        sum.updateCalc();
         return sum;
     };
 
     Vec operator * (double b) {
         Vec sum(this->x, this->y, this->z);
         sum.x *= b, sum.y *= b, sum.z *= b;
+        sum.updateCalc();
         return sum;
     };
 

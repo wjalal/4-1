@@ -1,165 +1,36 @@
 #include <bits/stdc++.h>
 #include <random>
-#include "draw_geometry.hpp"
+#include "geometry.hpp"
 #include <chrono>
+#include <string> 
+#include <fstream>
+#include "bitmap_image.hpp"
 
 using namespace std::chrono;
 
-Sphere ball (25.0, 16, 8);
-Cylinder ballDirAx (1.5, 40.0, 8);
-Cone ballDirHd (3.0, 10.0, 8);
+int recLevel = 0, screenHeight, screenWidth, captureId = 11; 
+double fovY = 90;
 
-double ballCtrlAngle = 45, ballPosX = 0, ballPosY = 0, boundary = 200;
-double simVel = 300, mspf = 30, simStartPosX, simStartPosY, simD0 = 0;
-bool simulation = false;
-int simColId;
-high_resolution_clock::time_point tStart;
+// Line lookAt (0, -90, 20, -30, 60, 20);
+Line lookAt (-10, -90, 50, 10, 30, 70);
+Vec *upVec, *lookAtVec, *rightVec;
 
-Line lookAt (250, 250, 300, 0, 0, 0);
+ifstream sceneFile;
+vector <Object*> objects;
+vector <PointLight*> pointLights;
+vector <SpotLight*> spotLights;
 
 void init(){
-    printf("Do your initialization here\n");
-    drawaxes = 1;
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Set background color to black and opaque
     glClearDepth(1.0f);
     glEnable(GL_DEPTH_TEST);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
 
-    gluPerspective(50, 1, 1, 2000.0);
+    gluPerspective(fovY, 1, 1, 1000.0);
     initCamVecs();
-};
+    tilt(5.0);
 
-void drawBoard() {
-    if (drawboard) {
-        glBegin(GL_QUADS); {
-            for (int i = -4000; i<+4000; i+=50) {
-                for (int j = -4000; j<+4000; j+=50) {
-                    if ((i+j)%100) glColor3f(0.2, 0.2, 0.2);
-                    else glColor3f(0.8, 0.8, 0.8);
-                    glVertex3f(i, j, 0);
-                    glVertex3f(i+50, j, 0);
-                    glVertex3f(i+50, j+50, 0);
-                    if ((i+j)%100) glColor3f(0, 0, 0);
-                    else glColor3f(1, 1, 1);
-                    glVertex3f(i, j+50, 0);
-                };
-            };
-        } glEnd();
-    };
-};
-
-void drawWalls (double L, double h) {
-    for (int i=0; i<4; i++) {
-        glPushMatrix();
-            glRotatef (90*i, 0, 0, 1);
-            glBegin (GL_QUADS); {
-                glColor3f (0.4, 0.2, 0.1);
-                glVertex3f (-L, -L, h);
-                glVertex3f (-L, -L, 0);
-                glVertex3f (-L, +L, 0);
-                glColor3f (0.6, 0.3, 0.15);
-                glVertex3f (-L, +L, h);
-            } glEnd();
-        glPopMatrix();
-    };
-};
-
-void rollBall (double a) {
-    double A = ballCtrlAngle * M_PI/180;
-    double d = a/360 * 2 * M_PI * ball.r;
-    double dX = d*cos(A), dY = d*sin(A), dX0;
-
-    dX0 = dX;
-    if (fabs(ballPosX+dX) > boundary-ball.r) {
-        dX = boundary-ball.r - fabs(ballPosX);
-        dY = dX * tan(A);
-        A = fmod (atan2(+sin(A),-cos(A)) + 2*M_PI, 2*M_PI);
-    } else if (fabs(ballPosY+dY) > boundary-ball.r) {
-        dY = boundary-ball.r - fabs(ballPosY);
-        dX = dY / tan(A);
-        A = fmod (atan2(-sin(A),+cos(A)) + 2*M_PI, 2*M_PI);
-    };
-    ballCtrlAngle = 180.0/M_PI * A;
-    ballPosX += dX, ballPosY += dY;
-    Vec* v = new Vec (-sin(A), cos(A), 0);
-    ball.rotate (v, a*dX/dX0);    
-};
-
-void simSchedColl();
-
-void simFlipX (int id) {
-    if (id != simColId) return;
-    double A = ballCtrlAngle * M_PI/180;
-    A = fmod (atan2(+sin(A),-cos(A)) + 2*M_PI, 2*M_PI);
-    ballCtrlAngle = 180.0/M_PI * A;
-    simSchedColl();
-};
-
-void simFlipY (int id) {
-    if (id != simColId) return;
-    double A = ballCtrlAngle * M_PI/180;
-    A = fmod (atan2(-sin(A),+cos(A)) + 2*M_PI, 2*M_PI);
-    ballCtrlAngle = 180.0/M_PI * A;
-    simSchedColl();
-};
-
-void simulateBall() {
-    if (simulation) {
-        high_resolution_clock::time_point t = high_resolution_clock::now();
-        duration<double> diff = t - tStart;
-        milliseconds ms = duration_cast<milliseconds>(diff);
-
-        double A = ballCtrlAngle * M_PI/180.0, d = simVel / 1000.0 /360 * 2 * M_PI * ball.r * ms.count();
-        ballPosX = simStartPosX + d*cos(A), ballPosY = simStartPosY + d*sin(A);
-        double a = (d-simD0)/(ball.r * 2*M_PI) * 360;
-        Vec* v = new Vec (-sin(A), cos(A), 0);
-        ball.rotate (v, a);    
-        delete v;
-        simD0 = d;
-    };
-};
-
-void simSchedColl() {
-    simColId++;
-    simStartPosX = ballPosX, simStartPosY = ballPosY;
-    double a = simVel / 1000.0;
-    double A = ballCtrlAngle * M_PI/180.0, d = a/360 * 2 * M_PI * ball.r;
-    double dX = d*cos(A), dY = d*sin(A);
-
-    double tX = fabs (((dX>0? +1:-1)*(boundary-ball.r)-ballPosX) / dX);
-    double tY = fabs (((dY>0? +1:-1)*(boundary-ball.r)-ballPosY) / dY);
-    // cout << tX << " " << tY << endl;
-    if (tX<tY) glutTimerFunc (tX, simFlipX, simColId);
-    else glutTimerFunc (tY, simFlipY, simColId);
-    tStart = high_resolution_clock::now(); 
-    simD0 = 0;
-};
-
-void keyboardListener(unsigned char key,int x, int y){
-    camKeyboardListener(key);
-    if (key == 'j') {
-        ballCtrlAngle = fmod (ballCtrlAngle + 15 + 360, 360);
-        if (simulation) simSchedColl();
-    } else if (key == 'l') {
-        ballCtrlAngle = fmod (ballCtrlAngle - 15 + 360, 360);
-        if (simulation) simSchedColl();
-    } else if (key == 'i') {
-        rollBall(+15);
-        if (simulation) simSchedColl();
-    } else if (key == 'k') {
-        rollBall(-15);
-        if (simulation) simSchedColl();
-    } else if (key == ' ') {
-        simulation = !simulation;
-        simColId = 0;
-        if (simulation) simSchedColl();
-    };
-};
-
-
-void specialKeyboardListener(int key,int x, int y){
-    camSpecialKeyboardListener(key);
 };
 
 void display() {    
@@ -171,50 +42,145 @@ void display() {
     gluLookAt  (lookAt.p1->x, lookAt.p1->y, lookAt.p1->z, 
                 lookAt.p2->x, lookAt.p2->y, lookAt.p2->z,  
                 upVec->x, upVec->y, upVec->z);
-    drawBoard();
-    glPushMatrix();
-        glScalef (1.01, 1.01, 1);
-        drawWalls (boundary, 40);
-    glPopMatrix();
-    drawWalls (boundary, 40);
 
-    glPushMatrix();       
-        glTranslatef(ballPosX,ballPosY,ball.r);
-        drawSphere(&ball);
-
-        if (drawUpArrow) {
-            glPushMatrix();
-                glTranslatef(0, 0, ball.r);
-                drawArrow(&ballDirAx, &ballDirHd, 1);
-            glPopMatrix();
-        };
-        
-        glPushMatrix();
-            glRotatef(ballCtrlAngle, 0, 0 ,1);
-            glPushMatrix();
-                glRotatef(90, 0, 1, 0);
-                drawArrow(&ballDirAx, &ballDirHd);
-            glPopMatrix();
-        glPopMatrix();
-    glPopMatrix();
+    for (int i=0; i<objects.size(); i++) {
+        objects[i]->draw();
+    };
 
     glutSwapBuffers();
 
 };
 
 void idle(){
-    if (time(0)%2) drawUpArrow = true;
-    else drawUpArrow = false;
-    simulateBall();
+    // if (time(0)%2) drawUpArrow = true;
+    // else drawUpArrow = false;
+    // simulateBall();
     glutPostRedisplay();
 };
 
-int main(int argc,char** argv){
+void loadData() {
+    int nObj, nPointLight, nSpotLight;
+    sceneFile >> recLevel >>  screenWidth >> nObj;
+    screenHeight = screenWidth;
+    string shape;
+    double r, g, b, ambi, diff, spec, refl, shine;
+    for (int i=0; i<nObj; i++) {
+        sceneFile >> shape;
+        double x, y, z, R;
+        Object* obj;
+        if (shape == "sphere") {
+            sceneFile >> x >> y >> z >> R;
+            Vec* center = new Vec (x, y, z);
+            obj = new Sphere (center, R);
+        } else if (shape == "triangle") {
+            sceneFile >> x >> y >> z;
+            Vec* p1 = new Vec (x, y ,z);
+            sceneFile >> x >> y >> z;
+            Vec* p2 = new Vec (x, y ,z);
+            sceneFile >> x >> y >> z;
+            Vec* p3 = new Vec (x, y ,z);
+            obj = new Triangle (p1, p2, p3);
+        } else if (shape == "general") {
+            double A, B, C, D, E, F, G, H, I, J, l, w, h;
+            sceneFile >> A >> B >> C >> D >> E >> F >> G >> H >> I >> J;
+            sceneFile >> x >> y >> z >> l >> w >> h;
+            Vec* p = new Vec (x, y ,z);
+            obj = new General (p, l, w, h, A, B, C, D, E, F, G, H, I, J);
+        };
+        sceneFile >> r >> g >> b >> ambi >> diff >> spec >> refl >> shine;
+        obj->setColor (r, g, b);
+        obj->setCoeff (ambi, diff, spec, refl);
+        obj->setShine (shine);
+        objects.push_back(obj);
+    };
+    sceneFile >> nPointLight;
+    for (int i=0; i<nPointLight; i++) {
+        double x, y, z;
+        sceneFile >> x >> y >> z;
+        Vec* p = new Vec (x, y ,z);
+        PointLight* light = new PointLight(p);
+        sceneFile >> r >> g >> b;
+        light->setColor (r, g, b);
+        pointLights.push_back(light);
+    };
+    sceneFile >> nSpotLight;
+    for (int i=0; i<nSpotLight; i++) {
+        double x, y, z, c;
+        sceneFile >> x >> y >> z;
+        Vec* p = new Vec (x, y ,z);
+        sceneFile >> r >> g >> b;
+        sceneFile >> x >> y >> z;
+        Vec* dir = new Vec (x, y ,z);
+        sceneFile >> c;
+        SpotLight* light = new SpotLight(p, dir, c);
+        light->setColor (r, g, b);
+        spotLights.push_back(light);
+    };
+};
+
+
+void capture() {
+    int imageWidth = screenWidth, imageHeight = screenHeight;
+    bitmap_image image (imageWidth, imageHeight);
+    image.set_all_channels (0, 0, 0);
+
+    double planeDistance = 1 / tan (fovY*M_PI/180.0/2.0);
+    Vec topLeft(0,0,0), eye(lookAt.p1->x, lookAt.p1->y, lookAt.p1->z);
+    topLeft = eye + (*lookAtVec)*planeDistance + (*rightVec)*(-1) + (*upVec); 
+    double du = 2.0/imageWidth, dv = 2.0/imageHeight;
+    topLeft = topLeft + (*rightVec)*(0.5*du) + (*upVec)*(-0.5*dv);
+
+    for (int i=0; i<imageWidth; i++) {
+        for (int j=0; j<imageHeight; j++) {
+            Object* nearest = nullptr;
+            double tMin = INFINITY;
+            Vec curPixel(0,0,0);
+            curPixel = topLeft + (*rightVec)*(i*du) + (*upVec)*(-j*dv);
+            curPixel = curPixel + eye*(-1);
+            Ray* ray = new Ray (eye.x, eye.y, eye.z, curPixel.x, curPixel.y, curPixel.z);
+            double* color;
+            for (int k=0; k<objects.size(); k++) {
+                double* oColor = new double[3];
+                double t = objects[k]->intersect(ray, oColor, 1);
+                if (t != -1) cout << "k = " << k << " t = " << t << endl;
+                if (t>0 && t<tMin) {
+                    nearest = objects[k], tMin = t, color = oColor;
+                };
+            };
+            if (nearest) {
+                cout << 255.0*color[RED] << " " << 255.0*color[GRN] << " " << 255.0*color[BLU] << endl;
+                image.set_pixel (i, j, 255.0*color[RED], 255.0*color[GRN], 255.0*color[BLU]);
+            };
+        };
+    };
+
+    string name = "images/Output_" + to_string(captureId) + ".bmp";
+    image.save_image (name);
+    captureId++;
+};
+
+
+void keyboardListener(unsigned char key,int x, int y){
+    camKeyboardListener(key);
+    if (key == '0') capture();
+};
+
+
+void specialKeyboardListener(int key,int x, int y){
+    camSpecialKeyboardListener(key);
+};
+
+
+int main(int argc,char** argv) {
+    sceneFile.open("scene.txt");
+    loadData();
+    objects.push_back (new Floor(1000, 20));
+
     glutInit(&argc,argv);
-    glutInitWindowSize(800, 800);   // Set the window's initial width & height
-    glutInitWindowPosition(1920+350, 125); // Position the window's initial top-left corner
+    glutInitWindowSize(screenWidth, screenHeight);  
+    glutInitWindowPosition(1920+350, 125); 
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
-    glutCreateWindow("Rolling Ball : 1905084");
+    glutCreateWindow("Raytracing : 1905084");
     glutDisplayFunc(display);
     glutKeyboardFunc(keyboardListener);
     glutSpecialFunc(specialKeyboardListener);
