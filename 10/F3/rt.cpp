@@ -1,10 +1,10 @@
-#include <bits/stdc++.h>
 #include <random>
 #include "geometry.hpp"
 #include <chrono>
 #include <string> 
 #include <fstream>
 #include "bitmap_image.hpp"
+#include <bits/stdc++.h>
 
 using namespace std::chrono;
 
@@ -29,7 +29,7 @@ void init(){
 
     gluPerspective(fovY, 1, 1, 1000.0);
     initCamVecs();
-    tilt(5.0);
+    tilt(7.5);
 
 };
 
@@ -142,13 +142,14 @@ void capture() {
             for (int k=0; k<objects.size(); k++) {
                 double* oColor = new double[3];
                 double t = objects[k]->intersect(ray, oColor, 1);
-                if (t != -1) cout << "k = " << k << " t = " << t << endl;
+                // if (t != -1 && k==8) cout << "k = " << k << " t = " << t << endl;
                 if (t>0 && t<tMin) {
                     nearest = objects[k], tMin = t, color = oColor;
                 };
             };
             if (nearest) {
-                cout << 255.0*color[RED] << " " << 255.0*color[GRN] << " " << 255.0*color[BLU] << endl;
+                // if (nearest == objects[8]) cout << 255.0*color[RED] << " " << 255.0*color[GRN] << " " << 255.0*color[BLU] << endl;
+                for (int c=0; c<3; c++) if (color[c] > 1) color[c] = 1;
                 image.set_pixel (i, j, 255.0*color[RED], 255.0*color[GRN], 255.0*color[BLU]);
             };
         };
@@ -156,6 +157,7 @@ void capture() {
 
     string name = "images/Output_" + to_string(captureId) + ".bmp";
     image.save_image (name);
+    cout << "image " << captureId << " saved" << endl;
     captureId++;
 };
 

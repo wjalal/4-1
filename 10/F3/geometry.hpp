@@ -68,8 +68,11 @@ public:
     };
 };
 
+class Object;
+
 extern vector<PointLight*> pointLights;
 extern vector<SpotLight*> spotLights;
+extern vector<Object*> objects;
 
 class Object {
 public: 
@@ -102,37 +105,59 @@ public:
         return nullptr;
     };
 
+    virtual double* getColor (Vec* intersectionPoint) {
+        return this->color;
+    };
+
+    bool obscuredByOther (Ray* R) {
+        Object* nearest = nullptr;
+        double tMin = INFINITY;
+        for (int k=0; k<objects.size(); k++) {
+            double t = objects[k]->intersect(R, nullptr, 0);
+            if (t>0 && t<tMin) {
+                if (t != -1) cout << "k = " << k << " t = " << t << endl;
+                nearest = objects[k], tMin = t;
+            };
+        };
+        if (nearest == this) return false;
+        return true;
+    };
+
     void calcPhong (Ray* R, double* color, int level, double t) {
         Vec intersectionPoint = (*R->start) + (*R->dir)*t;
-        for (int c=0; c<3; c++) color[c] = this->color[c] * coeff[AMBI];
+        for (int c=0; c<3; c++) color[c] = getColor(&intersectionPoint)[c] * coeff[AMBI];
+
         Vec* normal = getNormal(&intersectionPoint);
         for (int i=0; i<pointLights.size(); i++) {
             Vec* lDir = new Vec (0,0,0);
             *lDir = intersectionPoint*(-1) + (*pointLights[i]->ref_point);
             Ray* R1 = new Ray (pointLights[i]->ref_point, lDir);
+            if (obscuredByOther(R1)) continue;
             double lambert = (*R1->dir) * (*normal);
             Vec refl = (*R1->dir) + (*normal) * (-2*lambert);
-            Vec V (-intersectionPoint.x+lookAt.p1->x, -intersectionPoint.y+lookAt.p1->y, -intersectionPoint.z+lookAt.p1->z);
+            Vec V (+intersectionPoint.x-lookAt.p1->x, +intersectionPoint.y-lookAt.p1->y, +intersectionPoint.z-lookAt.p1->z);
             V.normalize();
             double phong = refl * V;
+            // lambert = max(0.0, lambert), phong = max(0.0, phong);
             for (int c=0; c<3; c++) 
-                color[c] += pointLights[i]->color[c] * (lambert*coeff[DIFF] + pow(phong, shine)*coeff[SPEC]) * this->color[c];
+                color[c] += pointLights[i]->color[c] * (max(0.0, lambert)*coeff[DIFF] + max(0.0, pow(phong, shine))*coeff[SPEC]) * getColor(&intersectionPoint)[c];
         };
         for (int i=0; i<spotLights.size(); i++) {
             Vec* lDir = new Vec (0,0,0);
             *lDir = intersectionPoint*(-1) + (*spotLights[i]->ref_point);
             Ray* R1 = new Ray (spotLights[i]->ref_point, lDir);
+            if (obscuredByOther(R1)) continue;
             double lambert = (*R1->dir) * (*normal);
             Vec refl = (*R1->dir) + (*normal) * (-2*lambert);
-            Vec V (-intersectionPoint.x+lookAt.p1->x, -intersectionPoint.y+lookAt.p1->y, -intersectionPoint.z+lookAt.p1->z);
+            Vec V (+intersectionPoint.x-lookAt.p1->x, +intersectionPoint.y-lookAt.p1->y, +intersectionPoint.z-lookAt.p1->z);
             V.normalize();
             double phong = refl * V;
+            // lambert = max(0.0, lambert), phong = max(0.0, phong);
             for (int c=0; c<3; c++) 
-                color[c] += spotLights[i]->color[c] * (lambert*coeff[DIFF] + pow(phong, shine)*coeff[SPEC]) * this->color[c];
+                color[c] += spotLights[i]->color[c] * (max(0.0, lambert)*coeff[DIFF] + max(0.0, pow(phong, shine))*coeff[SPEC]) * getColor(&intersectionPoint)[c];
         };
     };
 };
-
 
 class Sphere : public Object {
     int nSec= 20, nStack = 10;
@@ -228,7 +253,7 @@ public:
             else t = tP + sqrt(t_Sq);
         };
         if (level == 0) return t;
-        calcPhong (R, color, level, t);
+        if (t != -1) calcPhong (R, color, level, t);
         
         return t;
     };
@@ -252,6 +277,15 @@ public:
         } glEnd();
     };
 
+    Vec* getNormal (Vec* intersectionPoint) {
+        Vec edge1(0,0,0), edge2(0,0,0), *normal = new Vec (0,0,0);
+        edge1 = (*p2) + (*p1)*(-1);
+        edge2 = (*p3) + (*p1)*(-1);
+        normal = edge1.cross(&edge2);
+        normal->normalize();
+        return normal;
+    };
+
     double intersect (Ray* R, double* color, int level) {
         double t = -1;
         Vec edge1(0,0,0), edge2(0,0,0), Rxe2(0,0,0), S(0,0,0);
@@ -271,8 +305,7 @@ public:
         if (tMin > epsilon) t = tMin;
         if (level == 0) return t;
 
-        Vec intersectionPoint = (*R->start) + (*R->dir)*t;
-        for (int c=0; c<3; c++) color[c] = this->color[c] * coeff[AMBI];
+        if (t != -1) calcPhong (R, color, level, t);
         return t;
     };
 };
@@ -312,6 +345,16 @@ public:
         // } glEnd();
     };
 
+    Vec* getNormal (Vec* intersectionPoint) {
+        double xi = intersectionPoint->x, yi = intersectionPoint->y, zi = intersectionPoint->z;
+        double xn = 2*A*xi + D*yi + E*zi + G;
+        double yn = 2*B*yi + D*xi + F*zi + H;
+        double zn = 2*C*zi + E*xi + F*yi + I;
+        Vec *normal = new Vec (xn,yn,zn);
+        normal->normalize();
+        return normal;
+    };
+
     double intersect (Ray* R, double* color, int level) {
         double t = -1, xd = R->dir->x, yd = R->dir->y, zd = R->dir->z;
         double xr = R->start->x, yr = R->start->y, zr = R->start->z;
@@ -333,8 +376,7 @@ public:
         };
         if (level == 0) return t;
 
-        Vec intersectionPoint = (*R->start) + (*R->dir)*t;
-        for (int c=0; c<3; c++) color[c] = this->color[c] * coeff[AMBI];
+        if (t != -1) calcPhong (R, color, level, t);
         return t;
     };
 };   
@@ -343,10 +385,14 @@ public:
 class Floor : public Object {
 public:
     double floorWidth;
+    double colBlack[3] = {0,0,0}, colWhite[3] = {1,1,1};
     Floor (double floorWidth, double tileWidth) {
         ref_point = new Vec (0, 0, 0);
         this->length = tileWidth;
         this->floorWidth = floorWidth;
+        setColor (1, 0, 1);
+        setCoeff (0.4, 0.3, 0.2, 0.3);
+        setShine (10);
     };
 
     void draw() {
@@ -365,6 +411,33 @@ public:
             };
         } glEnd();
         glPopMatrix();
+    };
+
+    double* getColor (Vec* intersectionPoint) {
+        double x = intersectionPoint->x + floorWidth/2.0, y = intersectionPoint->y + floorWidth/2.0;
+        int i = x/length, j = y/length;
+        if ((i+j)%2) return colBlack;
+        return colWhite;
+    }; 
+
+    Vec* getNormal (Vec* intersectionPoint = nullptr) {
+        Vec* normal = new Vec (0,0,1);
+        return normal;
+    };
+
+    double intersect (Ray* R, double* color, int level) {
+        double t = -1;
+        Vec n = *getNormal();
+        double t_ = -(n * (*R->start))/(n * (*R->dir));
+        Vec P = (*R->start) + (*R->dir)*t_;
+        if (P.x < -floorWidth/2.0 || P.x > floorWidth/2.0) return t;
+        if (P.y < -floorWidth/2.0 || P.y > floorWidth/2.0) return t;
+        t = t_;
+        if (level == 0) return t;
+
+        if (t != -1) calcPhong (R, color, level, t);
+        // cout << color[RED] << " " << color[GRN] << " " << color[BLU] << endl;
+        return t;
     };
 };
 
