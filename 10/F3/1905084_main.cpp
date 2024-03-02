@@ -47,6 +47,14 @@ void display() {
         objects[i]->draw();
     };
 
+    for (int i=0; i<pointLights.size(); i++) {
+        pointLights[i]->draw();
+    };
+
+    for (int i=0; i<spotLights.size(); i++) {
+        spotLights[i]->draw();
+    }; 
+
     glutSwapBuffers();
 
 };

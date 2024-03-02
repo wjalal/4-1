@@ -52,6 +52,7 @@ public:
 
     void draw() {
         glColor3f (color[RED], color[GRN], color[BLU]);
+        glPointSize(5);
         glBegin (GL_POINTS); {
             glVertex3f (ref_point->x, ref_point->y, ref_point->z);
         } glEnd();
