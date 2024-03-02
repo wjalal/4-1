@@ -188,7 +188,7 @@ void onexit() {
 };
  
 int main(int argc,char** argv) {
-    sceneFile.open("scene2.txt");
+    sceneFile.open("scene.txt");
     loadData();
     objects.push_back (new Floor(1000, 20));
 

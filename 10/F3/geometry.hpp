@@ -174,11 +174,12 @@ public:
             Vec* lDir = new Vec (0,0,0), *refl = new Vec(0,0,0);
             *lDir = *intersectionPoint + (*spotLights[i]->ref_point)*(-1);
             lDir->normalize();
-            // double beta = acos ((*lDir)*(*spotLights[i]->light_dir)) * M_PI/180.0;
-            // if (beta > spotLights[i]->cuttoff_angle) {
-            //     delete lDir; delete refl;
-            //     continue;
-            // };
+            double beta = acos ((*lDir)*(*spotLights[i]->light_dir)) * 180.0/M_PI;
+            // cout << beta << endl;
+            if (beta > spotLights[i]->cuttoff_angle) {
+                delete lDir; delete refl;
+                continue;
+            };
             Ray* R1 = new Ray (spotLights[i]->ref_point, lDir);
             if (obscuredByOther(R1)) {
                 delete lDir; delete R1; delete refl;
@@ -541,13 +542,15 @@ public:
     }; 
 
     Vec* getNormal (Vec* intersectionPoint = nullptr) {
-        Vec* normal = new Vec (0,0,1);
+        Vec* normal;
+        if (intersectionPoint->z >= -0.000001) normal = new Vec (0,0,1);
+        else normal = new Vec (0,0,-1);
         return normal;
     };
 
     double intersect (Ray* R, double* color, int level) {
         double t = -1;
-        Vec *n = getNormal(), *P = new Vec(0,0,0);
+        Vec *n = getNormal(R->start), *P = new Vec(0,0,0);
         double t_ = -(*n * (*R->start))/(*n * (*R->dir));
         *P = (*R->start) + (*R->dir)*t_;
         if (P->x < -floorWidth/2.0 || P->x > floorWidth/2.0) {
