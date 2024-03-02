@@ -134,29 +134,34 @@ void capture() {
         for (int j=0; j<imageHeight; j++) {
             Object* nearest = nullptr;
             double tMin = INFINITY;
-            Vec curPixel(0,0,0);
-            curPixel = topLeft + (*rightVec)*(i*du) + (*upVec)*(-j*dv);
-            curPixel = curPixel + eye*(-1);
-            Ray* ray = new Ray (eye.x, eye.y, eye.z, curPixel.x, curPixel.y, curPixel.z);
-            double* color;
+            Vec* curPixel = new Vec(0,0,0);
+            *curPixel = topLeft + (*rightVec)*(i*du) + (*upVec)*(-j*dv);
+            *curPixel = *curPixel + eye*(-1);
+            Ray* ray = new Ray (eye.x, eye.y, eye.z, curPixel->x, curPixel->y, curPixel->z);
+            double* color = nullptr;
             for (int k=0; k<objects.size(); k++) {
                 double* oColor = new double[3];
                 double t = objects[k]->intersect(ray, oColor, 1);
                 // if (t != -1 && k==8) cout << "k = " << k << " t = " << t << endl;
                 if (t>0 && t<tMin) {
-                    nearest = objects[k], tMin = t, color = oColor;
-                };
+                    nearest = objects[k], tMin = t;
+                    if (color) delete[] color;
+                    color = oColor;
+                } else delete[] oColor;
             };
             if (nearest) {
                 // if (nearest == objects[8]) cout << 255.0*color[RED] << " " << 255.0*color[GRN] << " " << 255.0*color[BLU] << endl;
                 for (int c=0; c<3; c++) if (color[c] > 1) color[c] = 1;
                 image.set_pixel (i, j, 255.0*color[RED], 255.0*color[GRN], 255.0*color[BLU]);
+                delete[] color;
             };
+            delete ray; delete curPixel;
         };
     };
 
     string name = "images/Output_" + to_string(captureId) + ".bmp";
     image.save_image (name);
+    image.clear();
     cout << "image " << captureId << " saved" << endl;
     captureId++;
 };
@@ -172,9 +177,18 @@ void specialKeyboardListener(int key,int x, int y){
     camSpecialKeyboardListener(key);
 };
 
-
+void onexit() {
+    for (int i=0; i<objects.size(); i++) delete objects[i];
+    for (int i=0; i<pointLights.size(); i++) delete pointLights[i];
+    for (int i=0; i<spotLights.size(); i++) delete spotLights[i];
+    vector<Object*>().swap(objects);
+	vector<PointLight*>().swap(pointLights);
+	vector<SpotLight*>().swap(spotLights);
+    cout << "Bye" << endl; 
+};
+ 
 int main(int argc,char** argv) {
-    sceneFile.open("scene.txt");
+    sceneFile.open("scene2.txt");
     loadData();
     objects.push_back (new Floor(1000, 20));
 
@@ -188,7 +202,7 @@ int main(int argc,char** argv) {
     glutSpecialFunc(specialKeyboardListener);
     glutIdleFunc(idle);
     init();
-
+    atexit(onexit);
     glutMainLoop();
     return 0;
 

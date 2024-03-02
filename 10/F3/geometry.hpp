@@ -14,20 +14,30 @@
 constexpr double epsilon = std::numeric_limits<double>::epsilon();
 extern Vec* lookAtVec;
 extern Line lookAt;
+extern int recLevel;
 
 class Ray {
 public:
     Vec* start;
     Vec* dir;
+    bool alloc = false;
     Ray (Vec* start, Vec* dir) {
         this->start = start, this->dir = dir;
         this->dir->normalize();
+        this->alloc = false;
     };
     Ray (double startX, double startY, double startZ, double dirX, double dirY, double dirZ) {
         Vec* s = new Vec (startX, startY, startZ);
         Vec* d = new Vec (dirX, dirY, dirZ);
         this->start = s, this->dir = d;
         this->dir->normalize();
+        this->alloc = true;
+    };
+    ~Ray() {
+        if (alloc) {
+            delete start;
+            delete dir;
+        };
     };
 };
 
@@ -35,6 +45,10 @@ class Light {
 public: 
     Vec* ref_point;
     double color[3];
+
+    ~Light() {
+        delete ref_point;
+    };
 
     void draw() {
         glColor3f (color[RED], color[GRN], color[BLU]);
@@ -64,7 +78,12 @@ public:
     SpotLight (Vec* light_pos, Vec* light_dir, double cutoff_angle ) {
         this->ref_point = light_pos;
         this->light_dir = light_dir;
+        this->light_dir->normalize();
         this->cuttoff_angle = cutoff_angle;
+    };
+
+    ~SpotLight() {
+        delete light_dir;
     };
 };
 
@@ -83,6 +102,10 @@ public:
     int shine;
 
     // Object() ;
+    ~Object() {
+        delete ref_point;
+    };
+    
     virtual void draw() {};
 
     void setColor(double r, double g, double b) {
@@ -115,7 +138,7 @@ public:
         for (int k=0; k<objects.size(); k++) {
             double t = objects[k]->intersect(R, nullptr, 0);
             if (t>0 && t<tMin) {
-                if (t != -1) cout << "k = " << k << " t = " << t << endl;
+                // cout << "k = " << k << " t = " << t << endl;
                 nearest = objects[k], tMin = t;
             };
         };
@@ -123,39 +146,79 @@ public:
         return true;
     };
 
-    void calcPhong (Ray* R, double* color, int level, double t) {
-        Vec intersectionPoint = (*R->start) + (*R->dir)*t;
-        for (int c=0; c<3; c++) color[c] = getColor(&intersectionPoint)[c] * coeff[AMBI];
+    Ray* calcPhong (Ray* R, double* color, int level, double t) {
+        Vec* intersectionPoint = new Vec(0,0,0);
+        *intersectionPoint = (*R->start) + (*R->dir)*t;       
+        for (int c=0; c<3; c++) color[c] = getColor(intersectionPoint)[c] * coeff[AMBI];
 
-        Vec* normal = getNormal(&intersectionPoint);
+        Vec* normal = getNormal(intersectionPoint);
         for (int i=0; i<pointLights.size(); i++) {
-            Vec* lDir = new Vec (0,0,0);
-            *lDir = intersectionPoint*(-1) + (*pointLights[i]->ref_point);
+            Vec *lDir = new Vec (0,0,0), *refl = new Vec(0,0,0);
+            *lDir = *intersectionPoint + (*pointLights[i]->ref_point)*(-1);
+            lDir->normalize();
             Ray* R1 = new Ray (pointLights[i]->ref_point, lDir);
-            if (obscuredByOther(R1)) continue;
-            double lambert = (*R1->dir) * (*normal);
-            Vec refl = (*R1->dir) + (*normal) * (-2*lambert);
-            Vec V (+intersectionPoint.x-lookAt.p1->x, +intersectionPoint.y-lookAt.p1->y, +intersectionPoint.z-lookAt.p1->z);
-            V.normalize();
-            double phong = refl * V;
-            // lambert = max(0.0, lambert), phong = max(0.0, phong);
+            if (obscuredByOther(R1)) {
+                delete lDir; delete R1; delete refl;
+                continue;
+            };
+            *lDir = (*lDir) * (-1);
+            double lambert = (*lDir) * (*normal);
+            *refl = (*lDir) + (*normal) * (-2*lambert);
+            double phong = (*refl * (*R->dir));
+            lambert = max(0.0, lambert), phong = max(0.0, phong);
             for (int c=0; c<3; c++) 
-                color[c] += pointLights[i]->color[c] * (max(0.0, lambert)*coeff[DIFF] + max(0.0, pow(phong, shine))*coeff[SPEC]) * getColor(&intersectionPoint)[c];
+                color[c] += pointLights[i]->color[c] * (lambert*coeff[DIFF] + pow(phong, shine)*coeff[SPEC]) * getColor(intersectionPoint)[c];
+            delete lDir; delete R1; delete refl;
         };
         for (int i=0; i<spotLights.size(); i++) {
-            Vec* lDir = new Vec (0,0,0);
-            *lDir = intersectionPoint*(-1) + (*spotLights[i]->ref_point);
+            Vec* lDir = new Vec (0,0,0), *refl = new Vec(0,0,0);
+            *lDir = *intersectionPoint + (*spotLights[i]->ref_point)*(-1);
+            lDir->normalize();
+            // double beta = acos ((*lDir)*(*spotLights[i]->light_dir)) * M_PI/180.0;
+            // if (beta > spotLights[i]->cuttoff_angle) {
+            //     delete lDir; delete refl;
+            //     continue;
+            // };
             Ray* R1 = new Ray (spotLights[i]->ref_point, lDir);
-            if (obscuredByOther(R1)) continue;
+            if (obscuredByOther(R1)) {
+                delete lDir; delete R1; delete refl;
+                continue;
+            };
+            *lDir = (*lDir) * (-1);
             double lambert = (*R1->dir) * (*normal);
-            Vec refl = (*R1->dir) + (*normal) * (-2*lambert);
-            Vec V (+intersectionPoint.x-lookAt.p1->x, +intersectionPoint.y-lookAt.p1->y, +intersectionPoint.z-lookAt.p1->z);
-            V.normalize();
-            double phong = refl * V;
-            // lambert = max(0.0, lambert), phong = max(0.0, phong);
+            *refl = (*R1->dir) + (*normal) * (-2*lambert);
+            double phong = (*refl * (*R->dir));
+            lambert = max(0.0, lambert), phong = max(0.0, phong);
             for (int c=0; c<3; c++) 
-                color[c] += spotLights[i]->color[c] * (max(0.0, lambert)*coeff[DIFF] + max(0.0, pow(phong, shine))*coeff[SPEC]) * getColor(&intersectionPoint)[c];
+                color[c] += spotLights[i]->color[c] * (lambert*coeff[DIFF] + pow(phong, shine)*coeff[SPEC]) * getColor(intersectionPoint)[c];
+            delete lDir; delete R1; delete refl;
         };
+        // intersectionPoint = intersectionPoint + (*R->dir)*0.0001;
+        Vec* ref = new Vec(0,0,0);
+        *ref = (*R->dir) + (*normal) * (-2.0*((*R->dir)*(*normal)));
+        delete normal;
+        return new Ray (intersectionPoint, ref);
+    };
+
+    void reflect (Ray* rRef, int level, double* color) {
+        Object* nearest = nullptr;
+        double tMin = INFINITY;
+        for (int k=0; k<objects.size(); k++) {
+            if (objects[k] == this) continue;
+            double t = objects[k]->intersect(rRef, nullptr, 0);
+            if (t>0 && t<tMin) {
+                // cout << "k = " << k << " t = " << t << endl;
+                nearest = objects[k], tMin = t;
+            };
+        };
+        if (tMin > 0 && nearest) {
+            double* colRef = new double[3];
+            nearest->intersect (rRef, colRef, level+1);
+            for (int c=0; c<3; c++) color[c] += colRef[c] * coeff[REFL];
+            delete[] colRef;
+        };
+        delete rRef->start; delete rRef->dir;
+        delete rRef;
     };
 };
 
@@ -186,6 +249,22 @@ public:
                 downVerts[i][j] = new Point (R*cos(dTheta*j), R*sin(dTheta*j), -r*sin(phi));
             };
         };
+    };
+
+    ~Sphere() {
+        delete nPole; delete sPole;
+        for (int i=0; i<nSec; i++) delete eqVerts[i];
+        delete[] eqVerts;
+        for (int i=1; i<nStack; i++) {
+            for (int j=0; j<nSec; j++) {
+                delete upVerts[i][j];
+                delete downVerts[i][j];
+            };
+            delete[] upVerts[i];
+            delete[] downVerts[i];
+        };
+        delete[] upVerts;
+        delete[] downVerts;
     };
 
     void draw() {
@@ -241,20 +320,29 @@ public:
     };
 
     double intersect (Ray* R, double* color, int level) {
-        Vec R0 (0,0,0);
-        R0 = (*R->start) + (*ref_point)*(-1);
+        Vec* R0 = new Vec(0,0,0);
+        *R0 = (*R->start) + (*ref_point)*(-1);
         double t = -1, r = this->length;
-        double tP = -(R0 * (*R->dir));
-        double dSq = (R0 * R0) - tP*tP;
+        double tP = -(*R0 * (*R->dir));
+        double dSq = (*R0 * *R0) - tP*tP;
         double t_Sq = r*r - dSq;
-        bool originOutside = (R0.x*R0.x + R0.y*R0.y + R0.z*R0.z > r*r);
+        bool originOutside = (R0->x*R0->x + R0->y*R0->y + R0->z*R0->z > r*r);
         if (!originOutside || t_Sq > 0) {
             if (originOutside) t = tP - sqrt(t_Sq);
             else t = tP + sqrt(t_Sq);
         };
+        delete R0;
         if (level == 0) return t;
-        if (t != -1) calcPhong (R, color, level, t);
-        
+
+        if (t != -1) {
+            Ray* rRef = calcPhong (R, color, level, t);
+            if (level >= recLevel) {
+                delete rRef->start; delete rRef->dir;
+                delete rRef;
+                return t;
+            };
+            reflect (rRef, level, color);
+        };
         return t;
     };
 };
@@ -266,6 +354,10 @@ public:
     Triangle (Vec* p1, Vec* p2, Vec* p3) {
         ref_point = p1;
         this->p1 = p1, this->p2 = p2, this->p3 = p3;
+    };
+
+    ~Triangle() {
+        delete p2; delete p3;
     };
 
     void draw() {
@@ -288,24 +380,43 @@ public:
 
     double intersect (Ray* R, double* color, int level) {
         double t = -1;
-        Vec edge1(0,0,0), edge2(0,0,0), Rxe2(0,0,0), S(0,0,0);
-        edge1 = (*p2) + (*p1)*(-1);
-        edge2 = (*p3) + (*p1)*(-1);
-        Rxe2 = *(R->dir->cross(&edge2));
-        double det = edge1 * Rxe2;
-        if (det > -epsilon && det < epsilon) return -1;    
+        Vec *edge1 = new Vec(0,0,0), *edge2 = new Vec(0,0,0), *Rxe2, *S = new Vec(0,0,0), *S_;
+        *edge1 = (*p2) + (*p1)*(-1);
+        *edge2 = (*p3) + (*p1)*(-1);
+        Rxe2 = R->dir->cross(edge2);
+        double det = *edge1 * *Rxe2;
+        if (det > -epsilon && det < epsilon) {
+            delete edge1; delete edge2; delete Rxe2; delete S;
+            return -1;    
+        };
         double inv_det = 1.0 / det;
-        S = (*R->start) + (*p1)*(-1);
-        double u = inv_det * (S*Rxe2);
-        if (u < 0 || u > 1) return -1;
-        S = *(S.cross(&edge1));
-        double v = inv_det * ((*R->dir) * S);
-        if (v < 0 || u + v > 1) return -1;
-        double tMin = inv_det * (edge2 * S);
+        *S = (*R->start) + (*p1)*(-1);
+        double u = inv_det * (*S * *Rxe2);
+        if (u < 0 || u > 1) {
+            delete edge1; delete edge2; delete Rxe2; delete S;
+            return -1;
+        };
+        S_ = S->cross(edge1);
+        double v = inv_det * ((*R->dir) * *S_);
+        if (v < 0 || u + v > 1) {
+            delete edge1; delete edge2; delete Rxe2; delete S; delete S_;
+            return -1;
+        };
+        double tMin = inv_det * (*edge2 * *S_);
         if (tMin > epsilon) t = tMin;
+        delete edge1; delete edge2; delete Rxe2; delete S; delete S_;
+
         if (level == 0) return t;
 
-        if (t != -1) calcPhong (R, color, level, t);
+        if (t != -1) {
+            Ray* rRef = calcPhong (R, color, level, t);
+            if (level >= recLevel) {
+                delete rRef->start; delete rRef->dir;
+                delete rRef;
+                return t;
+            };
+            reflect (rRef, level, color);
+        };     
         return t;
     };
 };
@@ -365,18 +476,27 @@ public:
         if (t0 > 0 && t1 < 0) t = t0;
         else if (t1 > 0 && t0 < 0) t = t1;
         else if (t1 > 0 && t0 > 0) {
-            Vec P(0,0,0);
-            P = (*R->start) + (*R->dir)*t0;
-            bool t0b = checkBound(P.x, P.y, P.z);
-            P = (*R->start) + (*R->dir)*t1;
-            bool t1b = checkBound(P.x, P.y, P.z);
+            Vec* P = new Vec(0,0,0);
+            *P = (*R->start) + (*R->dir)*t0;
+            bool t0b = checkBound(P->x, P->y, P->z);
+            *P = (*R->start) + (*R->dir)*t1;
+            bool t1b = checkBound(P->x, P->y, P->z);
             if (t0b && !t1b) t = t0;
             else if (!t0b && t1b) t = t1;
             else if (t0b && t1b) t = min(t0,t1);
+            delete P;
         };
         if (level == 0) return t;
 
-        if (t != -1) calcPhong (R, color, level, t);
+        if (t != -1) {
+            Ray* rRef = calcPhong (R, color, level, t);
+            if (level >= recLevel) {
+                delete rRef->start; delete rRef->dir;
+                delete rRef;
+                return t;
+            };
+            reflect (rRef, level, color);
+        };
         return t;
     };
 };   
@@ -392,7 +512,7 @@ public:
         this->floorWidth = floorWidth;
         setColor (1, 0, 1);
         setCoeff (0.4, 0.3, 0.2, 0.3);
-        setShine (10);
+        setShine (20);
     };
 
     void draw() {
@@ -427,15 +547,30 @@ public:
 
     double intersect (Ray* R, double* color, int level) {
         double t = -1;
-        Vec n = *getNormal();
-        double t_ = -(n * (*R->start))/(n * (*R->dir));
-        Vec P = (*R->start) + (*R->dir)*t_;
-        if (P.x < -floorWidth/2.0 || P.x > floorWidth/2.0) return t;
-        if (P.y < -floorWidth/2.0 || P.y > floorWidth/2.0) return t;
+        Vec *n = getNormal(), *P = new Vec(0,0,0);
+        double t_ = -(*n * (*R->start))/(*n * (*R->dir));
+        *P = (*R->start) + (*R->dir)*t_;
+        if (P->x < -floorWidth/2.0 || P->x > floorWidth/2.0) {
+            delete n; delete P;
+            return t;
+        };
+        if (P->y < -floorWidth/2.0 || P->y > floorWidth/2.0) {
+            delete n; delete P;
+            return t;
+        };
         t = t_;
+        delete n; delete P;
         if (level == 0) return t;
 
-        if (t != -1) calcPhong (R, color, level, t);
+        if (t != -1) {
+            Ray* rRef = calcPhong (R, color, level, t);
+            if (level >= recLevel) {
+                delete rRef->start; delete rRef->dir;
+                delete rRef;
+                return t;
+            };
+            reflect (rRef, level, color);
+        };
         // cout << color[RED] << " " << color[GRN] << " " << color[BLU] << endl;
         return t;
     };

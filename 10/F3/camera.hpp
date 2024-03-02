@@ -111,6 +111,7 @@ void tilt (double a) {      // rotate upVec by angle a about lookVec
     Vec* Rot = new Vec (cos(A)*upVec->x + sin(A)*u->x, 
                         cos(A)*upVec->y + sin(A)*u->y, 
                         cos(A)*upVec->z + sin(A)*u->z);
+    delete r; delete u;
     delete upVec;
     upVec = Rot;
     upVec->normalize();
